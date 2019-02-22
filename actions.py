@@ -4,16 +4,18 @@ Based on the outputs, These functions will be called.
 For example: The hitpuck_5 output will call the hitpuck function with an intensity of 5.
 '''
 
-def hitpuck(intensity):
-    # output to motor based on intensity
-    print(intensity)
+from send_data import send
 
+def hit_puck(direction):
+    # spin hockey stick in direction specified
+    direction = direction.split('')[0]
+    send("h{}".format(direction))
 
-def moveleft(intensity):
+def move_up(intensity):
     # move robot left based on intensity
-    print(intenisty)
+    send("u{}".format(intensity))
 
-def moveright(intensity):
+def move_down(intensity):
     # move robot right based on intensity
-    print(intensity)
+    send("d{}".format(intensity))
 
