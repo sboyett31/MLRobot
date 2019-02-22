@@ -1,7 +1,5 @@
 from recv_data import recv_data
-from actions import hit_puck,\
-                    move_up, \
-                    move_down
+from actions import hit_puck, move_up, move_down
 
 
 class AirHockeyEnv:
