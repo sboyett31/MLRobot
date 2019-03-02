@@ -1,9 +1,3 @@
-'''
-Neural Network will have outputs that will be either 1 or 0.
-Based on the outputs, These functions will be called.
-For example: The hitpuck_5 output will call the hitpuck function with an intensity of 5.
-'''
-
 from send_data import send
 
 
