@@ -2,16 +2,12 @@ import tensorflow as tf
 import numpy as np
 import math
 import random as r
+import time
 import gym
 import matplotlib as plt
+from AirHockeyEnv import AirHockeyEnv
+from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, MAX_EPS, MIN_EPS
 
-# define hyper-parameters
-ALPHA = 0                   # Learning rate
-GAMMA = 0                   # Value between 0 and 1 used for importance of future rewards (static or dynamic)
-LAMBDA = 0                  # Decay rate for epsilon
-MAX_EPSILON = 0.9           # Value that epsilon starts at
-MIN_EPSILON = 0.05          # Value that epsilon will decay to
-                   
 
 class Model:
     def __init__(self, num_states, num_actions, batch_size):
@@ -31,7 +27,7 @@ class Model:
     def _define_model(self):
         self._states = tf.placeholder(shape=[None, self._num_states], dtype=tf.float32)
         self._q_s_a = tf.placeholder(shape=[None, self._num_actions], dtype=tf.float32)
-        # create two fully conneted hidden layers using activation fuction ReLU
+        # create two fully connected hidden layers using activation function ReLU
         fc1 = tf.layers.dense(self._states, 50, activation=tf.nn.relu)
         fc2 = tf.layers.dense(fc1, 50, activation=tf.nn.relu)
         self._logits = tf.layers.dense(fc2, self._num_actions)  # defaults to linear activation function
@@ -59,7 +55,6 @@ class Model:
 
 
 class Memory:
-
     #  This class stores all of the results of the actions taken by the agent during the game.
     #  This class also handles the retrieval of those results which can be used to batch
     #  train the network.
@@ -106,30 +101,35 @@ class GameRunner:
         self._max_x_store = []
 
     def run(self):
-        # We will need a function similar to env.reset()
-        # Ex: def reset:
-                # robot_pos = 0
-                # possibly clear some stuff
-                # read in new puck position
-                # return robot_pos, puck_x, puck_y, speed
-        state = self._env.reset()           # Resetting the environment (state is = to env)
+        # This is the execution of one "Episode"
+        # Episode - One sequence of states, actions, and rewards that ends in a terminal state
+        # For dummy data, terminal state = puck intercepting y axis
+        # For real data, terminal state = goal scored
+
+        state = self._env.reset()           # Resetting the environment
         tot_reward = 0                      # Setting tot_reward = 0
-        max_x = -100
+        done = False
+
         while True:
             if self._render:
                 self._env.render()
 
             action = self._choose_action(state)
-            next_state, reward, done, info = self._env.step(action)  # We need to create our own version of this
+            # print("action is: {}".format(action))
+            next_state, reward, done = self._env.step_dummy(action)  # We need to create our own version of this
+
+            """
+            This stuff is specific to mountain-car env
             if next_state[0] >= 0.1:
                 reward += 10
             elif next_state[0] >= 0.25:
                 reward += 20
             elif next_state[0] >= 0.5:
                 reward += 100
-
             if next_state[0] > max_x:
                 max_x = next_state[0]
+            """
+
             # is the game complete? If so, set the next state to
             # None for storage sake
             if done:
@@ -150,30 +150,31 @@ class GameRunner:
             # if the game is done, break the loop
             if done:
                 self._reward_store.append(tot_reward)
-                self._max_x_store.append(max_x)
+                # self._max_x_store.append(max_x)
                 break
 
-            print("Step {}, Total reward: {}, Eps: {}".format(self._steps, tot_reward, self._eps))
+            # print("Step {}, Total reward: {}, Eps: {}".format(self._steps, tot_reward, self._eps))
+            # time.sleep(1)
 
     def _choose_action(self, state):
         if r.random() < self._eps:
-            return r.randint(0, self._model.num_actions - 1)
+            return r.randint(0, self._model._num_actions - 1)
         else:
-            return np.argmax(self._moel.predict_one(state, self._sess))
+            return np.argmax(self._model.predict_one(state, self._sess))
 
     def _replay(self):
         GAMMA = 0        # hyper-parameter used to determine the importance of future rewards
-        batch = self._memory.sample(self._model.batch_size)
+        batch = self._memory.sample(self._model._batch_size)
         states = np.array([val[0] for val in batch])
-        next_states = np.array([(np.zeros(self._model.num_states)
+        next_states = np.array([(np.zeros(self._model._num_states)
                                  if val[3] is None else val[3]) for val in batch])
         # predict Q(s,a) given the batch of states
-        q_s_a = self._model.predict_batach(states, self._sess)
+        q_s_a = self._model.predict_batch(states, self._sess)
         # predict Q(s', a') - so that we can do gamma * max(Q(s', a')) below
         q_s_a_d = self._model.predict_batch(next_states, self._sess)
         # setup training arrays
-        x = np.zeros((len(batch), self._model.num_states))
-        y = np.zeros((len(batch), self._model.num_actions))
+        x = np.zeros((len(batch), self._model._num_states))
+        y = np.zeros((len(batch), self._model._num_actions))
         for i, b in enumerate(batch):
             state, action, reward, next_state = b[0], b[1], b[2], b[3]
             # get the current q values for all actions in state
@@ -192,26 +193,29 @@ class GameRunner:
 
 if __name__ == "__main__":
     env_name = 'MountainCar-v0'
-    env = gym.make(env_name)
+    # env = gym.make(env_name)
+    env = AirHockeyEnv()
 
-    num_states = env.env.observation_space.shape[0]
-    num_actions = env.env.action_space.n
+    # num_states = env.env.observation_space.shape[0]
+    num_states = NUM_ENV_VAR
+    # num_actions = env.env.action_space.n
+    num_actions = NUM_ACTIONS
 
-    model = Model(num_states, num_actions, batch_size=20)
+    model = Model(num_states, num_actions, batch_size=10)
     mem = Memory(50000)
 
     with tf.Session() as sess:
-        sess.run(model.var_init)
-        gr = GameRunner(sess, model, env, mem, MAX_EPSILON, MIN_EPSILON, LAMBDA)
-        num_episodes = 300
+        sess.run(model._var_init)
+        gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
+        num_episodes = 500
         count = 0
         while count < num_episodes:
             if count % 10 == 0:
-                print('Episode {} of {}'.format(count+1, num_episodes))
-                gr.run()
-                count+=1
-            plt.plot(gr.reward_store)
-            plt.show()
-            plt.close("all")
-            plt.plot(gr.max_x_store)
-            plt.show()
+                print('Episode {} of {}.  Epsilon Value: {}'.format(count+1, num_episodes, gr._eps))
+            gr.run()
+            count+=1
+            #plt.plot(gr.reward_store)
+            #plt.show()
+            #plt.close("all")
+            #plt.plot(gr.max_x_store)
+            #plt.show()
