@@ -86,7 +86,7 @@ class Memory:
 
 class GameRunner:
     # Where model dynamics, agent action, and training is organized.
-    def __init__(self, sess, model, env, memory, max_eps, min_eps, decay, render=True):
+    def __init__(self, sess, model, env, memory, max_eps, min_eps, decay, render=False):
         self._sess = sess           # TensorFlow session object
         self._env = env             # Open AI gym environment
         self._model = model         # Neural Network Model
@@ -149,12 +149,13 @@ class GameRunner:
 
             # if the game is done, break the loop
             if done:
+                # time.sleep()
                 self._reward_store.append(tot_reward)
                 # self._max_x_store.append(max_x)
                 break
 
-            # print("Step {}, Total reward: {}, Eps: {}".format(self._steps, tot_reward, self._eps))
-            # time.sleep(1)
+           # print("Step {}, Total reward: {}, Eps: {}".format(self._steps, tot_reward, self._eps))
+           # time.sleep(1)
 
     def _choose_action(self, state):
         if r.random() < self._eps:
@@ -207,7 +208,7 @@ if __name__ == "__main__":
     with tf.Session() as sess:
         sess.run(model._var_init)
         gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
-        num_episodes = 500
+        num_episodes = 50000
         count = 0
         while count < num_episodes:
             if count % 10 == 0:

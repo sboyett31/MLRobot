@@ -97,10 +97,11 @@ class AirHockeyEnv(gym.Env):
             self.viewer.add_geom(self.bot_wall)
 
         # print("Puck_x is: {}, Puck_y is: {}, Robot_pos is: {}".format(self._puck_x, self._puck_y, self._robot_pos))
-        x_pos = ((self._puck_x + 100)*scale) - 400
-        print("x_pos is: {} ".format(x_pos))
+        x_pos = (self._puck_x*scale) - 100
+        y_pos = self._puck_y*scale
+        # print("x_pos is: {}, y_pos is: {}, robot_pos is: {}".format(x_pos, y_pos,self._robot_pos*scale))
         self.puck_trans.set_translation(x_pos, self._puck_y*scale - 200)
-
+        self.stick_trans.set_translation(10, self._robot_pos*scale - 200)
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
     def update(self):
@@ -158,6 +159,7 @@ class AirHockeyEnv(gym.Env):
         # Stop puck at y axis
         if self._puck_x < X_MIN + 2:
             self._puck_x = X_MIN + 2
+        # print("self._puck_x is: {}".format(self._puck_x))
 
         # calculate reward
         x_dist = self._puck_x + 98  # checks distance between puck and dummy y axis (x = -97.5 (10/4))
@@ -168,8 +170,8 @@ class AirHockeyEnv(gym.Env):
         reward = (100-y_dist)*(0.01*(100-x_dist))  # Calc reward based on dist, if puck is closer, y_dist more important
         if x_dist == 0:
             done = True
-            #print("Robot Position: {}, Puck Y Position: {}, total loss is: {}".format(self._robot_pos, self._puck_y,
-            #      y_dist))
+            print("Robot Position: {}, Puck Y Position: {}, total loss is: {}".format(self._robot_pos, self._puck_y,
+                  y_dist))
 
         new_state.append(self._robot_pos)
         new_state.append(self._puck_x)

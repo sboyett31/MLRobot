@@ -11,6 +11,6 @@ NUM_ACTIONS = 11   # MOVE_UP(1-5), MOVE_DOWN(1-5), HIT_PUCK(L/R), DO NOTHING
 # Define Hyper-parameters
 ALPHA = 0                   # Learning rate
 GAMMA = 0                   # Value between 0 and 1 used for importance of future rewards (static or dynamic)
-LAMBDA = .001                  # Decay rate for epsilon
+LAMBDA = .00001                  # Decay rate for epsilon
 MAX_EPS = 0.9               # Value that epsilon starts at
-MIN_EPS = 0.05              # Value that epsilon will decay to
+MIN_EPS = 0.03              # Value that epsilon will decay to
