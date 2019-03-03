@@ -6,7 +6,7 @@ Y_MIN = 0
 
 # Define constants for model
 NUM_ENV_VAR = 5     # X, Y, X_SPEED, Y_SPEED, ROBOT_POS
-NUM_ACTIONS = 11   # MOVE_UP(1-5), MOVE_DOWN(1-5), HIT_PUCK(L/R), DO NOTHING
+NUM_ACTIONS = 11   # MOVE_UP(1-5), MOVE_DOWN(1-5), HIT_PUCK(L/R), DO NOTHING (hitpuck not used for simulation)
 
 # Define Hyper-parameters
 ALPHA = 0                   # Learning rate
