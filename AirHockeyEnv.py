@@ -2,9 +2,9 @@ from recv_data import recv_data, recv_dummy_data
 from actions import hit_puck, move_up, move_down
 from constants import X_MAX, X_MIN, Y_MAX, Y_MIN
 import numpy as np
+import time
 import gym
 from gym.utils import seeding
-
 
 class AirHockeyEnv(gym.Env):
     metadata = {
@@ -20,6 +20,8 @@ class AirHockeyEnv(gym.Env):
         self._puck_y = 0
         self._speed_x = 0
         self._speed_y = 0
+        self.hit_up = False
+        self.hit_down = False
 
         # Definining variables for rendering environment
         self.top_wall = None
@@ -68,6 +70,7 @@ class AirHockeyEnv(gym.Env):
         world_width = 200
         world_height = 100
         scale = 4
+        clearance = 10
 
         pr = 15  # puck radius
 
@@ -79,9 +82,9 @@ class AirHockeyEnv(gym.Env):
             self.bot_wall = rendering.Line(start=(0, 0), end=(200*scale, 0))
 
             self.goal = rendering.Line(start=(1.0, 40.0*scale), end=(1.0, 60.0*scale))
-            self.stick = rendering.Line(start=(10.0, (self._robot_pos*scale) - 20), end=(10.0, (self._robot_pos*scale) + 20))
+            self.stick = rendering.Line(start=(8, (self._robot_pos*scale) - 20), end=(8, (self._robot_pos*scale) + 20))
             self.puck = rendering.make_circle(radius=pr, res=30, filled=True)
-            self.puck.add_attr(rendering.Transform(translation=(self.x_conv(self._puck_x)*scale, self._puck_y*scale)))
+            self.puck.add_attr(rendering.Transform(translation=(500, 200)))
             self.puck.set_color(0, 0, 255)
 
             self.puck_trans = rendering.Transform()
@@ -96,39 +99,35 @@ class AirHockeyEnv(gym.Env):
             self.viewer.add_geom(self.top_wall)
             self.viewer.add_geom(self.bot_wall)
 
-        # print("Puck_x is: {}, Puck_y is: {}, Robot_pos is: {}".format(self._puck_x, self._puck_y, self._robot_pos))
         x_pos = (self._puck_x*scale) - 100
         y_pos = self._puck_y*scale
         # print("x_pos is: {}, y_pos is: {}, robot_pos is: {}".format(x_pos, y_pos,self._robot_pos*scale))
+        # print("Puck Pos: ({},{}) | Stick Pos: ({}, {})".format(x_pos, self._puck_y*scale - 200, 200, self._robot_pos*scale - 200))
+        self.puck.set_color(0, 0, 255)
         self.puck_trans.set_translation(x_pos, self._puck_y*scale - 200)
-        self.stick_trans.set_translation(10, self._robot_pos*scale - 200)
+        self.stick_trans.set_translation(8, self._robot_pos*scale - 200)
+        # print("self.hit_up is: {}, self.hit_down is: {}".format(self.hit_up, self.hit_down))
+        if self.hit_up:
+            # self.stick_trans.set_rotation(45)
+            # print("rotation is: {}".format(self.stick_trans.rotation))
+            self.hit_up = False
+        elif self.hit_down:
+            # self.stick_trans.set_rotation(-45)
+            # print("rotation is: {}".format(self.stick_trans.rotation))
+            self.hit_down = False
+        else:
+            self.stick_trans.set_rotation(0)
+
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
-    def update(self):
-        # This function will receive values from image processing to update
-        # environment.
-
-        new_state = []
-        self._prev_x = self._puck_x
-        self._prev_y = self._puck_y
-        rc = recv_data()
-
-        # update values based on data returned by receive data function
-        self._puck_x = rc[0]
-        self._puck_y = rc[1]
-        self._speed_x = self.get_speed('x')
-        self._speed_y = self.get_speed('y')
-
-        new_state.append(self._robot_pos)
-        for x in range(2): new_state.append(rc[x])
-        new_state.append(self._speed_x)
-        new_state.append(self._speed_y)
-
-        return np.array(new_state)
+    def quit_render(self):
+        self.viewer.close()
 
     def step_dummy(self, action):
 
         done = False
+        hit = False
+        int = False
         reward = 0
         x_dist = 0
         y_dist = 0
@@ -136,18 +135,18 @@ class AirHockeyEnv(gym.Env):
         self._puck_x += self._speed_x
         self._puck_y += self._speed_y
 
-        # actions 0 - 5 = Move Up    #
-        # actions 6 - 10 = Move Down #
-        # action 11 = Do nothing     #
-        # print("action is: {}".format(action))
-        if 0 < action < 6:
+        # print("Action is: {}".format(action))
+        if 0 < action < 6:      # actions 0 - 5 = Move Up
             intensity = action
             self._robot_pos += intensity
-        elif 5 < action < 11:
+        elif 5 < action < 11:   # actions 6 - 10 = Move Down
             intensity = action - 5
             self._robot_pos -= intensity
-        elif action == 0:
-            # Do nothing, no hit puck actions for dummy data
+        elif action == 12:
+            self.hit_up = True
+        elif action == 13:
+            self.hit_down = True
+        elif action == 0:       # action 11 = Do nothing
             pass
 
         # stop robot at walls
@@ -157,21 +156,59 @@ class AirHockeyEnv(gym.Env):
             self._robot_pos = Y_MAX
 
         # Stop puck at y axis
-        if self._puck_x < X_MIN + 2:
-            self._puck_x = X_MIN + 2
-        # print("self._puck_x is: {}".format(self._puck_x))
+        if self._puck_x < X_MIN:
+            self._puck_x = X_MIN
+
+        if self._puck_y < Y_MIN:
+            self._speed_y = -self._speed_y
+            self._puck_y = Y_MIN + (Y_MIN - self._puck_y)
+        elif self._puck_y > Y_MAX:
+            self._speed_y = -self._speed_y                  # Turn around puck
+            self._puck_y = Y_MAX - (self._puck_y - Y_MAX)  # Keep consistency with distance traveled
 
         # calculate reward
-        x_dist = self._puck_x + 98  # checks distance between puck and dummy y axis (x = -97.5 (10/4))
+        x_dist = self._puck_x + 100  # checks distance between puck and dummy y axis (x = -97.5 (10/4))
         if x_dist > 100:
             x_dist = 100  # caps x_dist at 100
         y_dist = abs(self._puck_y - self._robot_pos)
 
-        reward = (100-y_dist)*(0.01*(100-x_dist))  # Calc reward based on dist, if puck is closer, y_dist more important
+        # The reward equation for just straight line dummy data
+        if ((100-y_dist)*(0.01*(100-x_dist))) > 50:  # Calc reward based on dist, if puck is closer, y_dist more imp
+            reward += 10
+
+        # Reward system based on robot being in a position where it will be able to intercept the puck
+        #if y_dist < (x_dist/abs(self._speed_x))*5:
+        #    #print("y_dist is: {}, x_dist is: {}, speed_x is: {}".format(y_dist, x_dist, self._speed_x))
+        #    reward = 1
+        #else:
+        #    #print("else y_dist is: {}, x_dist is: {}, speed_x is: {}".format(y_dist, x_dist, self._speed_x))
+        #    reward = -500
+
         if x_dist == 0:
+            # Reward for intercepting puck
+            if y_dist < 5:
+                int = True
+                reward += 100 - (y_dist*5)
             done = True
-            print("Robot Position: {}, Puck Y Position: {}, total loss is: {}".format(self._robot_pos, self._puck_y,
-                  y_dist))
+            if y_dist < 5:
+                # Check for successful hit
+                if self._puck_y >= self._robot_pos and action == 12:
+                    # Successful hit up action
+                    reward += 1000
+                    hit = True
+                    if self.puck is not None:
+                        self.puck.set_color(255, 0, 0)
+                        time.sleep(1)
+                elif self._puck_y <= self._robot_pos and action == 13:
+                    # Successful hit down action
+                    reward += 1000
+                    hit = True
+                    if self.puck is not None:
+                        self.puck.set_color(255, 0, 0)
+                        time.sleep(1)
+                    # time.sleep(1)
+            #print("Robot Position: {}, Puck Y Position: {},  Loss is: {}, Hit: {}".format(self._robot_pos, self._puck_y,
+            #      y_dist, hit))
 
         new_state.append(self._robot_pos)
         new_state.append(self._puck_x)
@@ -179,7 +216,8 @@ class AirHockeyEnv(gym.Env):
         new_state.append(self._speed_x)
         new_state.append(self._speed_y)
 
-        return np.array(new_state), reward, done
+        return np.array(new_state), reward, int, hit, done
+
     '''
     def step(self, action):
         # This function will be responsible for stepping to the next state
@@ -261,3 +299,25 @@ class AirHockeyEnv(gym.Env):
                 return abs(v2 - v1)
         elif not self.in_play():
             return 0
+
+    '''
+    def update(self):
+        # Updtate Environment
+        new_state = []
+        self._prev_x = self._puck_x
+        self._prev_y = self._puck_y
+        rc = recv_data()
+
+        # update values based on data returned by receive data function
+        self._puck_x = rc[0]
+        self._puck_y = rc[1]
+        self._speed_x = self.get_speed('x')
+        self._speed_y = self.get_speed('y')
+
+        new_state.append(self._robot_pos)
+        for x in range(2): new_state.append(rc[x])
+        new_state.append(self._speed_x)
+        new_state.append(self._speed_y)
+
+        return np.array(new_state)
+    '''

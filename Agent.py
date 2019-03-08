@@ -2,12 +2,14 @@ import tensorflow as tf
 import numpy as np
 import math
 import random as r
+import statistics as s
 import time
 import gym
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from AirHockeyEnv import AirHockeyEnv
 from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, MAX_EPS, MIN_EPS
 
+render_flag = False
 
 class Model:
     def __init__(self, num_states, num_actions, batch_size):
@@ -30,9 +32,11 @@ class Model:
         # create two fully connected hidden layers using activation function ReLU
         fc1 = tf.layers.dense(self._states, 50, activation=tf.nn.relu)
         fc2 = tf.layers.dense(fc1, 50, activation=tf.nn.relu)
+        # fc3 = tf.layers.dense(fc2, 50, activation=tf.nn.relu)   # Added third layer to try it out
         self._logits = tf.layers.dense(fc2, self._num_actions)  # defaults to linear activation function
         # defines the type of loss we are using (mean squared error loss)
-        loss = tf.losses.mean_squared_error(self._q_s_a, self._logits)
+        loss = tf.losses.mean_squared_error(self._q_s_a, self._logits)      #Figure out how to get value of loss
+        print("loss is: {}".format(loss))
         # define optimization method generic: (AdamOptimizer).. (research better optimization)
         self._optimizer = tf.train.AdamOptimizer().minimize(loss)
         self._var_init = tf.global_variables_initializer()
@@ -66,12 +70,20 @@ class Memory:
         # Make sure not to run into memory errors
         self._max_memory = max_memory
         self._samples = []
+        self._sample_count = 0
+        # Memory Full flag
+        self.full = False
+
 
     def add_sample(self, sample):
         # Takes an individual tuple and appends it to the _samples list
         # Pops in FIFO manner if max_memory is reached
         self._samples.append(sample)
+        self._sample_count += 1
         if len(self._samples) > self._max_memory:
+            if not self.full:
+                print("**********MEMORY FULL**********")
+                self.full = True
             self._samples.pop(0)  # FIFO
 
     def sample(self, no_samples):
@@ -82,6 +94,9 @@ class Memory:
             return r.sample(self._samples, len(self._samples))
         else:
             return r.sample(self._samples, no_samples)
+
+    def print_samples(self):
+        print(self._samples)
 
 
 class GameRunner:
@@ -98,64 +113,56 @@ class GameRunner:
         self._eps = self._max_eps   # Initialize epsilon to max value
         self._steps = 0
         self._reward_store = []
-        self._max_x_store = []
+        self.hit = 0
+        self.int = 0
 
     def run(self):
         # This is the execution of one "Episode"
         # Episode - One sequence of states, actions, and rewards that ends in a terminal state
         # For dummy data, terminal state = puck intercepting y axis
         # For real data, terminal state = goal scored
+        # State: Rpos, Xpos, Ypos, Xspeed, Yspeed
 
         state = self._env.reset()           # Resetting the environment
         tot_reward = 0                      # Setting tot_reward = 0
+        rendering = False
         done = False
+        self.hit = 0
 
         while True:
-            if self._render:
+            if self._render or render_flag:
                 self._env.render()
 
-            action = self._choose_action(state)
-            # print("action is: {}".format(action))
-            next_state, reward, done = self._env.step_dummy(action)  # We need to create our own version of this
+            action = 0                       # initialize action to do nothing
+            if state[1] < 0:
+                # Only react if puck is on our side of env
+                action = self._choose_action(state)
 
-            """
-            This stuff is specific to mountain-car env
-            if next_state[0] >= 0.1:
-                reward += 10
-            elif next_state[0] >= 0.25:
-                reward += 20
-            elif next_state[0] >= 0.5:
-                reward += 100
-            if next_state[0] > max_x:
-                max_x = next_state[0]
-            """
+            next_state, reward, self.int, self.hit, done = self._env.step_dummy(action)  #Still step
 
-            # is the game complete? If so, set the next state to
-            # None for storage sake
-            if done:
-                next_state = None
+            #if self.int:
+            #    print("Intercepted!")
 
-            self._memory.add_sample((state, action, reward, next_state))
-            self._replay()
+            #if self.hit:
+            #    print("hit!!!!!!!!!!")
 
-            # exponentially decay the epsilon value
-            self._steps += 1
-            self._eps = self._min_eps + (self._max_eps - self._min_eps) \
-                * math.exp(-self._decay * self._steps)
-
+            if state[1] < 0:
+                # Neural Net ignores states where puck is not on our side
+                tot_reward += reward
+                if done:
+                    next_state = None
+                self._memory.add_sample((state, action, reward, next_state))
+                self._replay()
+                # exponentially decay the epsilon value
+                self._steps += 1
+                self._eps = self._min_eps + (self._max_eps - self._min_eps) \
+                    * math.exp(-self._decay * self._steps)
             # move the agent to the next state and accumulate the reward
             state = next_state
-            tot_reward += reward
-
             # if the game is done, break the loop
             if done:
-                # time.sleep()
                 self._reward_store.append(tot_reward)
-                # self._max_x_store.append(max_x)
                 break
-
-           # print("Step {}, Total reward: {}, Eps: {}".format(self._steps, tot_reward, self._eps))
-           # time.sleep(1)
 
     def _choose_action(self, state):
         if r.random() < self._eps:
@@ -164,7 +171,6 @@ class GameRunner:
             return np.argmax(self._model.predict_one(state, self._sess))
 
     def _replay(self):
-        GAMMA = 0        # hyper-parameter used to determine the importance of future rewards
         batch = self._memory.sample(self._model._batch_size)
         states = np.array([val[0] for val in batch])
         next_states = np.array([(np.zeros(self._model._num_states)
@@ -193,8 +199,9 @@ class GameRunner:
 
 
 if __name__ == "__main__":
-    env_name = 'MountainCar-v0'
+    # env_name = 'MountainCar-v0'
     # env = gym.make(env_name)
+
     env = AirHockeyEnv()
 
     # num_states = env.env.observation_space.shape[0]
@@ -202,21 +209,60 @@ if __name__ == "__main__":
     # num_actions = env.env.action_space.n
     num_actions = NUM_ACTIONS
 
-    model = Model(num_states, num_actions, batch_size=10)
-    mem = Memory(50000)
+    model = Model(num_states, num_actions, batch_size=20)
+    mem = Memory(500000)
 
     with tf.Session() as sess:
         sess.run(model._var_init)
         gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
-        num_episodes = 50000
+        num_episodes = 5000
         count = 0
+        episode_hits = 0
+        episode_ints = 0
+        li = []
+        mem_full_reward = []
+        int_pct_arr = []
+        hit_pct_arr = []
         while count < num_episodes:
+            if gr.int:
+                episode_ints += 1
+            if gr.hit:
+                episode_hits += 1
             if count % 10 == 0:
-                print('Episode {} of {}.  Epsilon Value: {}'.format(count+1, num_episodes, gr._eps))
+                if count != 0:
+                    li = gr._reward_store[count-10:count-1]
+                    '''
+                    if not mem.full: 
+                        li = gr._reward_store[count-10:count-1]
+                    elif mem.full:
+                        li = mem_full_reward[count-10:count-2]
+                        li.append(gr._reward_store[count-1])
+                    '''
+                    avg_rwd = sum(li) / float(len(li))
+                    int_pct = episode_ints*10
+                    hit_pct = episode_hits*10
+                    int_pct_arr.append(int_pct)
+                    hit_pct_arr.append(hit_pct)
+                    print('Episode {} of {}.  Eps Value: {:.4f}, Avg Reward: {:.2f}, Int Rate: {}% Hit Rate: {}%'.format(count+1, num_episodes, gr._eps, avg_rwd, int_pct, hit_pct))
+                episode_ints = 0
+                episode_hits = 0
+            ''' 
+            if not mem.full and count != 0:
+                mem_full_reward.append(0)
+            elif mem.full and count != 0:
+                mem_full_reward.append(gr._reward_store[count-1])
+                gr._reward_store[count-1] = 0
+            '''
             gr.run()
-            count+=1
-            #plt.plot(gr.reward_store)
-            #plt.show()
-            #plt.close("all")
-            #plt.plot(gr.max_x_store)
-            #plt.show()
+            count += 1
+            if count/num_episodes > .99 and not render_flag:
+                render_flag = True
+        plt.plot(gr._reward_store, 'b')  # mem_full_reward, 'r')
+        plt.show()
+        plt.plot(int_pct_arr, 'k')
+        plt.show()
+        plt.plot(hit_pct_arr, 'g')
+        plt.show()
+        #plt.close("all")
+        #plt.plot(gr.max_x_store)
+        #plt.show()
