@@ -209,13 +209,13 @@ if __name__ == "__main__":
     # num_actions = env.env.action_space.n
     num_actions = NUM_ACTIONS
 
-    model = Model(num_states, num_actions, batch_size=20)
-    mem = Memory(500000)
+    model = Model(num_states, num_actions, batch_size=1)
+    mem = Memory(5000000)
 
     with tf.Session() as sess:
         sess.run(model._var_init)
         gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
-        num_episodes = 5000
+        num_episodes = 20000
         count = 0
         episode_hits = 0
         episode_ints = 0
@@ -226,8 +226,8 @@ if __name__ == "__main__":
         while count < num_episodes:
             if gr.int:
                 episode_ints += 1
-            if gr.hit:
-                episode_hits += 1
+                if gr.hit:
+                    episode_hits += 1
             if count % 10 == 0:
                 if count != 0:
                     li = gr._reward_store[count-10:count-1]
@@ -255,10 +255,10 @@ if __name__ == "__main__":
             '''
             gr.run()
             count += 1
-            if count/num_episodes > .99 and not render_flag:
-                render_flag = True
-        plt.plot(gr._reward_store, 'b')  # mem_full_reward, 'r')
-        plt.show()
+            #if count/num_episodes > .99 and not render_flag:
+            #    render_flag = True
+        #plt.plot(gr._reward_store, 'b')  # mem_full_reward, 'r')
+        #plt.show()
         plt.plot(int_pct_arr, 'k')
         plt.show()
         plt.plot(hit_pct_arr, 'g')

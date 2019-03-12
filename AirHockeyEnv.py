@@ -142,9 +142,9 @@ class AirHockeyEnv(gym.Env):
         elif 5 < action < 11:   # actions 6 - 10 = Move Down
             intensity = action - 5
             self._robot_pos -= intensity
-        elif action == 12:
+        elif 10 < action < 16:
             self.hit_up = True
-        elif action == 13:
+        elif 15 < action < 21:
             self.hit_down = True
         elif action == 0:       # action 11 = Do nothing
             pass
@@ -173,8 +173,17 @@ class AirHockeyEnv(gym.Env):
         y_dist = abs(self._puck_y - self._robot_pos)
 
         # The reward equation for just straight line dummy data
-        if ((100-y_dist)*(0.01*(100-x_dist))) > 50:  # Calc reward based on dist, if puck is closer, y_dist more imp
-            reward += 10
+        #if ((100-y_dist)*(0.01*(100-x_dist))) > 50:  # Calc reward based on dist, if puck is closer, y_dist more imp
+        #    reward += 10
+
+        if y_dist < 20:
+            reward += 1
+            if y_dist < 15:
+                reward += 1
+                if y_dist < 10:
+                    reward += 1
+                    if y_dist < 5:
+                        reward += 1
 
         # Reward system based on robot being in a position where it will be able to intercept the puck
         #if y_dist < (x_dist/abs(self._speed_x))*5:
@@ -184,31 +193,45 @@ class AirHockeyEnv(gym.Env):
         #    #print("else y_dist is: {}, x_dist is: {}, speed_x is: {}".format(y_dist, x_dist, self._speed_x))
         #    reward = -500
 
+        if 10 < action < 21:
+            reward += 10 - x_dist
+
         if x_dist == 0:
             # Reward for intercepting puck
             if y_dist < 5:
                 int = True
-                reward += 100 - (y_dist*5)
+                reward += 5  # 100 - (y_dist*5)
+            else:
+                reward += -5
+
             done = True
-            if y_dist < 5:
-                # Check for successful hit
-                if self._puck_y >= self._robot_pos and action == 12:
+
+            #if y_dist < 5:
+            #    # Check for successful hit
+            #    if 10 < action < 21:
+            #        reward += 5
+            #    else:
+            #        reward += -5
+            #    if self._puck_y >= self._robot_pos and 10 < action < 16:
                     # Successful hit up action
-                    reward += 1000
-                    hit = True
-                    if self.puck is not None:
-                        self.puck.set_color(255, 0, 0)
-                        time.sleep(1)
-                elif self._puck_y <= self._robot_pos and action == 13:
+            #        reward += 10
+            #        hit = True
+            #        if self.puck is not None:
+            #            self.puck.set_color(255, 0, 0)
+            #            time.sleep(1)
+            #    elif self._puck_y <= self._robot_pos and 15 < action < 21:
                     # Successful hit down action
-                    reward += 1000
-                    hit = True
-                    if self.puck is not None:
-                        self.puck.set_color(255, 0, 0)
-                        time.sleep(1)
+            #        reward += 10
+            #        hit = True
+            #        if self.puck is not None:
+            #            self.puck.set_color(255, 0, 0)
+            #            time.sleep(1)
                     # time.sleep(1)
             #print("Robot Position: {}, Puck Y Position: {},  Loss is: {}, Hit: {}".format(self._robot_pos, self._puck_y,
             #      y_dist, hit))
+        #else:
+        #    if 10 < action < 21:
+        #        reward += -5
 
         new_state.append(self._robot_pos)
         new_state.append(self._puck_x)
