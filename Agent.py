@@ -2,12 +2,17 @@ import tensorflow as tf
 import numpy as np
 import math
 import random as r
+import pickle as p
+import threading as t
 import statistics as s
 import time
 import gym
+import csv
+import os
 import matplotlib.pyplot as plt
 from AirHockeyEnv import AirHockeyEnv
-from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, MAX_EPS, MIN_EPS
+from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, \
+    MAX_EPS, MIN_EPS, MAX_MEMORY, BATCH, NUM_EPISODES, SAV_INCR
 
 render_flag = False
 
@@ -35,11 +40,10 @@ class Model:
         # fc3 = tf.layers.dense(fc2, 50, activation=tf.nn.relu)   # Added third layer to try it out
         self._logits = tf.layers.dense(fc2, self._num_actions)  # defaults to linear activation function
         # defines the type of loss we are using (mean squared error loss)
-        loss = tf.losses.mean_squared_error(self._q_s_a, self._logits)      #Figure out how to get value of loss
-        print("loss is: {}".format(loss))
-        # define optimization method generic: (AdamOptimizer).. (research better optimization)
-        self._optimizer = tf.train.AdamOptimizer().minimize(loss)
+        loss = tf.losses.mean_squared_error(self._q_s_a, self._logits)      # Figure out how to get value of loss
+        self._optimizer = tf.train.AdamOptimizer().minimize(loss)           # Learning rate parameter(default .001)
         self._var_init = tf.global_variables_initializer()
+        self.saver = tf.train.Saver()
 
     def predict_one(self, state, sess):
         # returns the output of the network with an input of a single state
@@ -71,20 +75,29 @@ class Memory:
         self._max_memory = max_memory
         self._samples = []
         self._sample_count = 0
-        # Memory Full flag
+        # Memory Size Indicator
         self.full = False
-
+        # Save memory between runs
+        self._file_full = False
+        self._save_count = 0
+        self._datafile = None
+        # Rad memory at start up
+        self.read_mem()
 
     def add_sample(self, sample):
         # Takes an individual tuple and appends it to the _samples list
         # Pops in FIFO manner if max_memory is reached
+        # print(sample)
         self._samples.append(sample)
-        self._sample_count += 1
+        self._save_count += 1
         if len(self._samples) > self._max_memory:
             if not self.full:
                 print("**********MEMORY FULL**********")
                 self.full = True
             self._samples.pop(0)  # FIFO
+        if self._save_count > SAV_INCR:
+            self.save_mem()
+            self._save_count = 0
 
     def sample(self, no_samples):
         # returns a randomly selected sample
@@ -95,14 +108,37 @@ class Memory:
         else:
             return r.sample(self._samples, no_samples)
 
-    def print_samples(self):
-        print(self._samples)
+    def save_mem(self):
+        # Linux Fork Operation commented out
+        # newpid = os.fork()
+        newpid = 0
+        if newpid == 0:
+            print("Writing memory...")
+            save_samples = self._samples
+            save_file = open('memory_20B_150k.pickle', 'wb')
+            p.dump(save_samples, save_file)
+            save_file.close()
+            print("Complete")
+        else:
+            pass
+
+    def read_mem(self):
+        # Read memory from file at startup using deserialization
+        try:
+            print("Checking for memory file.")
+            self._datafile = open('memory_20B_100k.pickle', 'rb')
+            print("Reading memory...")
+            self._samples = p.load(self._datafile)
+            print("Complete")
+        except FileNotFoundError:
+            # No Memory to Read
+            print("No memory to read... Starting with empty memory.")
 
 
 class GameRunner:
     # Where model dynamics, agent action, and training is organized.
-    def __init__(self, sess, model, env, memory, max_eps, min_eps, decay, render=False):
-        self._sess = sess           # TensorFlow session object
+    def __init__(self, tf_sess, model, env, memory, max_eps, min_eps, decay, render=False):
+        self._sess = tf_sess        # TensorFlow session object
         self._env = env             # Open AI gym environment
         self._model = model         # Neural Network Model
         self._memory = memory       # Instance of Memory Class
@@ -112,39 +148,28 @@ class GameRunner:
         self._decay = decay         # Rate at which epsilon will decay
         self._eps = self._max_eps   # Initialize epsilon to max value
         self._steps = 0
-        self._reward_store = []
+        self._reward_list = []
         self.hit = 0
         self.int = 0
 
     def run(self):
         # This is the execution of one "Episode"
         # Episode - One sequence of states, actions, and rewards that ends in a terminal state
-        # For dummy data, terminal state = puck intercepting y axis
-        # For real data, terminal state = goal scored
         # State: Rpos, Xpos, Ypos, Xspeed, Yspeed
-
         state = self._env.reset()           # Resetting the environment
         tot_reward = 0                      # Setting tot_reward = 0
-        rendering = False
-        done = False
         self.hit = 0
 
         while True:
             if self._render or render_flag:
                 self._env.render()
-
-            action = 0                       # initialize action to do nothing
+            # Initialize action to 0 so that no action will be taken unless puck is on our side
+            action = 0
             if state[1] < 0:
                 # Only react if puck is on our side of env
                 action = self._choose_action(state)
 
-            next_state, reward, self.int, self.hit, done = self._env.step_dummy(action)  #Still step
-
-            #if self.int:
-            #    print("Intercepted!")
-
-            #if self.hit:
-            #    print("hit!!!!!!!!!!")
+            next_state, reward, self.int, self.hit, done = self._env.step_dummy(action)
 
             if state[1] < 0:
                 # Neural Net ignores states where puck is not on our side
@@ -153,15 +178,15 @@ class GameRunner:
                     next_state = None
                 self._memory.add_sample((state, action, reward, next_state))
                 self._replay()
-                # exponentially decay the epsilon value
+                # decay epsilon value
                 self._steps += 1
                 self._eps = self._min_eps + (self._max_eps - self._min_eps) \
                     * math.exp(-self._decay * self._steps)
-            # move the agent to the next state and accumulate the reward
+            # update state
             state = next_state
-            # if the game is done, break the loop
+            # if the episode is done, break the loop
             if done:
-                self._reward_store.append(tot_reward)
+                self._reward_list.append(tot_reward)
                 break
 
     def _choose_action(self, state):
@@ -188,8 +213,7 @@ class GameRunner:
             current_q = q_s_a[i]
             # update the q value for action
             if next_state is None:
-                # In this case, the game completed after action, so there is no max Q(s', a1)
-                # prediction
+                # The episode is completed, so there is no next state
                 current_q[action] = reward
             else:
                 current_q[action] = reward + GAMMA * np.amax(q_s_a_d[i])
@@ -198,24 +222,43 @@ class GameRunner:
         self._model.train_batch(self._sess, x, y)
 
 
+def save_model(saver, ss):
+    # Function in order to implement saving using multi threading
+    # newpid = os.fork()  LINUX OS CALL
+    newpid = 0
+    if newpid == 0:
+        save_path = saver.save(ss, "../MLRobot/20B_150k.ckpt")
+        print("Model saved in path %s" % save_path)
+    else:
+        pass
+
+
+def save_eps(eps):
+    #  Save epsilon value between runs
+    save_file = open('save_eps.txt', 'w')
+    save_file.write(str(eps))
+    save_file.close()
+
+
 if __name__ == "__main__":
-    # env_name = 'MountainCar-v0'
-    # env = gym.make(env_name)
 
     env = AirHockeyEnv()
-
-    # num_states = env.env.observation_space.shape[0]
-    num_states = NUM_ENV_VAR
-    # num_actions = env.env.action_space.n
-    num_actions = NUM_ACTIONS
-
-    model = Model(num_states, num_actions, batch_size=20)
-    mem = Memory(500000)
+    model = Model(NUM_ENV_VAR, NUM_ACTIONS, batch_size=BATCH)
+    mem = Memory(MAX_MEMORY)
 
     with tf.Session() as sess:
-        sess.run(model._var_init)
+        # sess.run(model._var_init)
+        try:
+            model.saver.restore(sess, "../MLRobot/20B_100k.ckpt")
+            print("Model loaded!")
+        except:
+            # If there is no prior model to restore
+            print("No previous model to load...")
+            print("Initializing Artificial Neural Network Model")
+            sess.run(model._var_init)
+
         gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
-        num_episodes = 5000
+        num_episodes = NUM_EPISODES
         count = 0
         episode_hits = 0
         episode_ints = 0
@@ -229,40 +272,37 @@ if __name__ == "__main__":
             if gr.hit:
                 episode_hits += 1
             if count % 10 == 0:
-                if count != 0:
-                    li = gr._reward_store[count-10:count-1]
-                    '''
-                    if not mem.full: 
-                        li = gr._reward_store[count-10:count-1]
-                    elif mem.full:
-                        li = mem_full_reward[count-10:count-2]
-                        li.append(gr._reward_store[count-1])
-                    '''
+                if count != 0 and count % 100 == 0:
+                    # Print Stats every 100 episodes
+                    li = gr._reward_list[count-100:count-1]
                     avg_rwd = sum(li) / float(len(li))
-                    int_pct = episode_ints*10
-                    hit_pct = episode_hits*10
+                    int_pct = episode_ints
+                    hit_pct = episode_hits
                     int_pct_arr.append(int_pct)
                     hit_pct_arr.append(hit_pct)
-                    print('Episode {} of {}.  Eps Value: {:.4f}, Avg Reward: {:.2f}, Int Rate: {}% Hit Rate: {}%'.format(count+1, num_episodes, gr._eps, avg_rwd, int_pct, hit_pct))
-                episode_ints = 0
-                episode_hits = 0
-            ''' 
-            if not mem.full and count != 0:
-                mem_full_reward.append(0)
-            elif mem.full and count != 0:
-                mem_full_reward.append(gr._reward_store[count-1])
-                gr._reward_store[count-1] = 0
-            '''
+                    print('Episode {} of {}.  Eps Value: {:.4f}, Avg Reward: {:.2f}, Int Rate: {}% Hit Rate: {}%'
+                          .format(count+1, num_episodes, gr._eps, avg_rwd, int_pct, hit_pct))
+                    episode_ints = 0
+                    episode_hits = 0
+
+            elif count % 999 == 0:
+                # Saving Model and Epsilon Value every 1000 Episodes
+                save_sess = sess
+                save_model(model.saver, save_sess)
+                save_eps(gr._eps)
             gr.run()
             count += 1
             if count/num_episodes > .99 and not render_flag:
-                render_flag = True
-        plt.plot(gr._reward_store, 'b')  # mem_full_reward, 'r')
+                # Display Simulation after 99% Of episodes have been complete
+                # render_flag = True
+                pass
+        # Plot Results
+        plt.plot(gr._reward_list, 'b')  # mem_full_reward, 'r')
         plt.show()
         plt.plot(int_pct_arr, 'k')
         plt.show()
         plt.plot(hit_pct_arr, 'g')
         plt.show()
-        #plt.close("all")
-        #plt.plot(gr.max_x_store)
-        #plt.show()
+        # plt.close("all")
+        # plt.plot(gr.max_x_store)
+        # plt.show()
