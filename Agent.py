@@ -3,11 +3,9 @@ import numpy as np
 import math
 import random as r
 import pickle as p
-import threading as t
 import statistics as s
 import time
 import gym
-import csv
 import os
 import matplotlib.pyplot as plt
 from AirHockeyEnv import AirHockeyEnv
