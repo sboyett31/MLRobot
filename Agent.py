@@ -12,7 +12,9 @@ import os
 import matplotlib.pyplot as plt
 from AirHockeyEnv import AirHockeyEnv
 from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, \
-    MAX_EPS, MIN_EPS, MAX_MEMORY, BATCH, NUM_EPISODES, SAV_INCR
+    MAX_EPS, MIN_EPS, MAX_MEMORY, BATCH, NUM_EPISODES, SAV_INCR, SAVE_MODEL, \
+    LOAD_MODEL, SAVE_MEMORY, LOAD_MEMORY
+
 
 render_flag = False
 
@@ -115,7 +117,7 @@ class Memory:
         if newpid == 0:
             print("Writing memory...")
             save_samples = self._samples
-            save_file = open('memory_20B_150k.pickle', 'wb')
+            save_file = open(SAVE_MEMORY, 'wb')
             p.dump(save_samples, save_file)
             save_file.close()
             print("Complete")
@@ -126,7 +128,7 @@ class Memory:
         # Read memory from file at startup using deserialization
         try:
             print("Checking for memory file.")
-            self._datafile = open('memory_20B_100k.pickle', 'rb')
+            self._datafile = open(LOAD_MEMORY, 'rb')
             print("Reading memory...")
             self._samples = p.load(self._datafile)
             print("Complete")
@@ -170,6 +172,11 @@ class GameRunner:
                 action = self._choose_action(state)
 
             next_state, reward, self.int, self.hit, done = self._env.step_dummy(action)
+
+            '''
+            Here we can move the robot to the position to hit the puck if the puck is close enough based on delay
+            
+            '''
 
             if state[1] < 0:
                 # Neural Net ignores states where puck is not on our side
@@ -227,7 +234,7 @@ def save_model(saver, ss):
     # newpid = os.fork()  LINUX OS CALL
     newpid = 0
     if newpid == 0:
-        save_path = saver.save(ss, "../MLRobot/20B_150k.ckpt")
+        save_path = saver.save(ss, SAVE_MODEL)
         print("Model saved in path %s" % save_path)
     else:
         pass
@@ -249,7 +256,7 @@ if __name__ == "__main__":
     with tf.Session() as sess:
         # sess.run(model._var_init)
         try:
-            model.saver.restore(sess, "../MLRobot/20B_100k.ckpt")
+            model.saver.restore(sess, LOAD_MODEL)
             print("Model loaded!")
         except:
             # If there is no prior model to restore
@@ -294,8 +301,7 @@ if __name__ == "__main__":
             count += 1
             if count/num_episodes > .99 and not render_flag:
                 # Display Simulation after 99% Of episodes have been complete
-                # render_flag = True
-                pass
+                render_flag = True
         # Plot Results
         plt.plot(gr._reward_list, 'b')  # mem_full_reward, 'r')
         plt.show()

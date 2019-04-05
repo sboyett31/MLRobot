@@ -1,4 +1,6 @@
 from recv_data import recv_data, recv_dummy_data
+from send_data import send
+import os
 from actions import hit_puck, move_up, move_down
 from constants import X_MAX, X_MIN, Y_MAX, Y_MIN
 import numpy as np
@@ -44,7 +46,7 @@ class AirHockeyEnv(gym.Env):
         # This function will be responsible for resetting the environment
         # When necessary. (Primarily robot position)
         new_state = []
-        #rc = recv_data()
+        # rc = recv_data()
         rc = recv_dummy_data()
         # move_down(100)              # move down to y = 0
         self._robot_pos = 50        # not sure when to implement this, could do move_up(50)
@@ -103,6 +105,131 @@ class AirHockeyEnv(gym.Env):
     def quit_render(self):
         self.viewer.close()
 
+    '''
+    def step(self, action):
+        # This will be the function used for the really world data.
+
+        done = 0
+        reward = 0
+        updated = False
+        hit = False
+        int = False
+        new_state = []
+        rc = []
+        self._prev_x = self._puck_x
+        self._prev_y = self._puck_y
+
+        if 0 < action < 6:      # actions 1 - 5 = Move Up
+            intensity = action
+            self._robot_pos += intensity
+        elif 5 < action < 11:   # actions 6 - 10 = Move Down
+            intensity = action - 5
+            self._robot_pos -= intensity
+        elif action == 11:
+            self.hit_up = True
+        elif action == 12:
+            self.hit_down = True
+        elif action == 0:       # action = Do nothing
+            pass
+
+        if 0 < action < 11:
+            # Send the position of the robot to the arduino for positioning.
+            # newpid = os.fork() LINUX SYSTEM CAL
+            newpid = 0
+            if newpid == 0:
+                send(self._robot_pos)
+        elif action == 11:
+            # newpid = os.fork()  LINUX SYSTEM CALL
+            newpid = 0
+            if newpid == 0:
+                send(11)  # Send whatever will be used for the hit up action
+        elif action == 12:
+            # newpid = os.fork() LINUX SYSTEM CALL
+            newpid = 0
+            if newpid == 0:
+                send(12)    # Send whatever will be used for the hit up action
+
+        while not updated:
+            # Loop waits for new data to be received before moving on
+            rc = recv_data()
+            if rc[0] != self._prev_x and rc[1] != self._prev_y:
+                updated = True
+
+        # Update values with new data received from image processing
+        self._puck_x = rc[0]
+        self._puck_y = rc[1]
+        self._speed_x = self.get_speed('x')
+        self._speed_y = self.get_speed('y')
+
+        # calculate reward
+        x_dist = self._puck_x + 100  # checks distance between puck and dummy y axis (x = -97.5 (10/4))
+        if x_dist > 100:
+            x_dist = 100  # caps x_dist at 100
+        y_dist = abs(self._puck_y - self._robot_pos)
+
+        # The reward equation could be used if we implemented Joel's algorithm as an input
+        if ((100 - y_dist) * (
+                0.01 * (100 - x_dist))) > 50:  # Calc reward based on dist, if puck is closer, y_dist more imp
+            reward += 10
+
+        if x_dist == 0:
+            # Reward for intercepting puck
+            if y_dist < 5:
+                reward += 100 - (y_dist * 5)
+            done = True
+            if y_dist < 5:
+                # Check for successful hit
+                if self._puck_y >= self._robot_pos and action == 12:
+                    # Successful hit up action
+                    reward += 1000
+                    hit = True
+                    if self.puck is not None:
+                        self.puck.set_color(255, 0, 0)
+                        time.sleep(1)
+                elif self._puck_y <= self._robot_pos and action == 13:
+                    # Successful hit down action
+                    reward += 1000
+                    hit = True
+                    if self.puck is not None:
+                        self.puck.set_color(255, 0, 0)
+                        time.sleep(1)
+        else:
+            # Subtract from reward if hit action is chosen while puck is not close
+            # (Will try this out later)
+            reward -= 500
+            pass
+
+        new_state.append(self._robot_pos)
+        new_state.append(self._puck_x)
+        new_state.append(self._puck_y)
+        new_state.append(self._speed_x)
+        new_state.append(self._speed_y)
+
+        return np.array(new_state), reward, int, hit, done
+    '''
+    def position_robot(self):
+        # One strategy is to use this function and wait to call it until puck is approaching
+        # Either way, robot pos will be updated dynamically while puck is moving
+        move_up(self._robot_pos)
+        return
+
+    def in_play(self):
+        # Return true if puck is in play
+        return self._puck_x != -999 and self._puck_y != -999
+    '''
+
+    def get_speed(self, axis):
+        # returns the speed based on a previous position (v1) and a current position (v2)
+        v1 = self._prev_x, v2 = self._puck_x if axis == 'x' else self._prev_y, self._puck_y
+        if self.in_play():
+            if v2 < v1:
+                return -abs(v2 - v1)
+            elif v2 > v1:
+                return abs(v2 - v1)
+        elif not self.in_play():
+            return 0
+
+    '''
     def step_dummy(self, action):
 
         done = False
@@ -164,14 +291,14 @@ class AirHockeyEnv(gym.Env):
             done = True
             if y_dist < 5:
                 # Check for successful hit
-                if self._puck_y >= self._robot_pos and action == 12:
+                if self._puck_y >= self._robot_pos and action == 11:
                     # Successful hit up action
                     reward += 1000
                     hit = True
                     if self.puck is not None:
                         self.puck.set_color(255, 0, 0)
                         time.sleep(1)
-                elif self._puck_y <= self._robot_pos and action == 13:
+                elif self._puck_y <= self._robot_pos and action == 12:
                     # Successful hit down action
                     reward += 1000
                     hit = True
@@ -179,9 +306,8 @@ class AirHockeyEnv(gym.Env):
                         self.puck.set_color(255, 0, 0)
                         time.sleep(1)
         else:
-            # Subtract from reward if hit action is chosen while puck is not close
-            # (Will try this out later)
-            pass
+            if action == 11 or action == 12:
+                reward -= 100  # Teach robot not to hit unless it is time to
 
         new_state.append(self._robot_pos)
         new_state.append(self._puck_x)
@@ -190,83 +316,3 @@ class AirHockeyEnv(gym.Env):
         new_state.append(self._speed_y)
 
         return np.array(new_state), reward, int, hit, done
-
-    '''
-    def step(self, action):
-        # This will be the function used for the realy world data. 
-
-        done = 0
-        reward = 0
-        new_state = []
-        prev_speed_x = self._speed_x
-        self._prev_x = self._puck_x
-        self._prev_y = self._puck_y
-
-        if 0 < action > 6:
-            intensity = int(action.split(' ')[2])
-            self._robot_pos += intensity
-            # move_up(intensity)
-            # OR (Based on how we move the robot physically
-            # This part would just update robot_pos var
-            # Then wait for certain time to send data to arduino
-        elif 5 < action > 11:
-            intensity = int(action.split(' ')[2])
-            self._robot_pos -= intensity
-            # move_down(intensity)
-        # elif action == 11:
-
-        # elif action == 12:
-        # elif action.startswith("hit puck"):
-        #   direction = action.split(' ')[2]
-        #    hit_puck(direction)
-        elif action == 13:
-            # do nothing
-            pass
-
-            rc = recv_data()
-            self._puck_x = rc[0]
-            self._puck_y = rc[1]
-            self._speed_x = self.get_speed('x')
-            self._speed_y = self.get_speed('y')
-
-            # Determine a reward for action taken
-            if self._robot_pos == self._puck_y and self._puck_x < 0:
-                # Puck is close and robot is mirroring it
-                reward += 10
-            elif self._robot_pos != self._puck_y and self._puck_x < 0:
-                # Puck is close and robot is not mirroring it
-                reward -= abs(self._robot_pos - self._puck_y)
-
-            if self._puck_x == self._puck_y == -999:
-                done = 1
-                if prev_speed_x > 0:
-                    # Puck was going in positive direction ( away from our robot )
-                    reward = 100
-
-            new_state.append(self._robot_pos)
-            for x in range(2): new_state.append(rc[x])
-            new_state.append(self._speed_x)
-            new_state.append(self._speed_y)
-
-        return new_state, reward, done
-    '''
-    def position_robot(self):
-        # One strategy is to use this function and wait to call it until puck is approaching
-        # Either way, robot pos will be updated dynamically while puck is moving
-        move_up(self._robot_pos)
-        return
-
-    def in_play(self):
-        # Return true if puck is in play
-        return self._puck_x != -999 and self._puck_y != -999
-
-    def get_speed(self, axis):
-        # returns the speed based on a previous position (v1) and a current position (v2)
-        v1 = self._prev_x, v2 = self._puck_x if axis == 'x' else self._prev_y, self._puck_y
-        if self.in_play():
-            if v2 < v1:
-                return -abs(v2 - v1)
-            elif v2 > v1:
-                return abs(v2 - v1)
-        elif not self.in_play():
-            return 0
