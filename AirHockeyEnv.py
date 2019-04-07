@@ -24,7 +24,7 @@ class AirHockeyEnv(gym.Env):
         self.hit_up = False
         self.hit_down = False
 
-        self.cnxn = None
+        self.cnxn = est_cnxn()
 
         # Definining variables for rendering environment
         self.top_wall = None
@@ -48,18 +48,20 @@ class AirHockeyEnv(gym.Env):
         # When necessary. (Primarily robot position)
         new_state = []
         # rc = recv_data()
-        self.cnxn = est_cnxn()
         rc = recv_data(self.cnxn)
         # move_down(100)              # move down to y = 0
         self._robot_pos = 50        # not sure when to implement this, could do move_up(50)
         self._puck_x = rc[0]
         self._puck_y = rc[1]
-        self._speed_x = rc[2]
-        self._speed_y = rc[3]
+        self._speed_x = 0 #self.get_speed('x')
+        self._speed_y = 0 #self.get_speed('y')
 
         new_state.append(self._robot_pos)
-        for x in range(4): new_state.append(rc[x])
-
+        new_state.append(rc[0])
+        new_state.append(rc[1])
+        new_state.append(self._speed_x)
+        new_state.append(self._speed_y)
+        
         return np.array(new_state)
 
     def render(self, mode='human'):
@@ -133,6 +135,7 @@ class AirHockeyEnv(gym.Env):
         elif action == 0:       # action = Do nothing
             pass
 
+        '''
         if 0 < action < 11:
             # Send the position of the robot to the arduino for positioning.
             # newpid = os.fork() LINUX SYSTEM CAL
@@ -149,7 +152,8 @@ class AirHockeyEnv(gym.Env):
             newpid = 0
             if newpid == 0:
                 send(12)    # Send whatever will be used for the hit up action
-
+        '''
+        
         while not updated:
             # Loop waits for new data to be received before moving on
             rc = recv_data(self.cnxn)
@@ -159,8 +163,8 @@ class AirHockeyEnv(gym.Env):
         # Update values with new data received from image processing
         self._puck_x = rc[0]
         self._puck_y = rc[1]
-        self._speed_x = self.get_speed('x')
-        self._speed_y = self.get_speed('y')
+        self._speed_x = 0 #self.get_speed('x')
+        self._speed_y = 0 #self.get_speed('y')
 
         # calculate reward
         x_dist = self._puck_x + 100  # checks distance between puck and dummy y axis (x = -97.5 (10/4))

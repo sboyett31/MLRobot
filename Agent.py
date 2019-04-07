@@ -7,7 +7,7 @@ import statistics as s
 import time
 import gym
 import os
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from AirHockeyEnv import AirHockeyEnv
 from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, \
     MAX_EPS, MIN_EPS, MAX_MEMORY, BATCH, NUM_EPISODES, SAV_INCR, SAVE_MODEL, \
@@ -168,8 +168,10 @@ class GameRunner:
             if state[1] < 0:
                 # Only react if puck is on our side of env
                 action = self._choose_action(state)
+                print("action is: {}".format(action))
 
-            next_state, reward, self.int, self.hit, done = self._env.step_dummy(action)
+
+            next_state, reward, self.int, self.hit, done = self._env.step(action)
 
             '''
             Here we can move the robot to the position to hit the puck if the puck is close enough based on delay
@@ -301,12 +303,12 @@ if __name__ == "__main__":
                 # Display Simulation after 99% Of episodes have been complete
                 render_flag = True
         # Plot Results
-        plt.plot(gr._reward_list, 'b')  # mem_full_reward, 'r')
-        plt.show()
-        plt.plot(int_pct_arr, 'k')
-        plt.show()
-        plt.plot(hit_pct_arr, 'g')
-        plt.show()
+        #plt.plot(gr._reward_list, 'b')  # mem_full_reward, 'r')
+        #plt.show()
+        #plt.plot(int_pct_arr, 'k')
+        #plt.show()
+        #plt.plot(hit_pct_arr, 'g')
+        #plt.show()
         # plt.close("all")
         # plt.plot(gr.max_x_store)
         # plt.show()

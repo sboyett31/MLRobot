@@ -8,24 +8,33 @@ import random as r
 
 
 def est_cnxn():
-    TCP_IP = socket.gethostname()
+    TCP_IP = "192.168.0.1"
     TCP_PORT = 5000
     BUFFER_SIZE = 1024
+    print("Connecting....")
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((TCP_IP, TCP_PORT))
+    print("Connection established!")
     return s
 
 def recv_data(s):
     # Receives x and y data from image processing.  Returns flag when new data is presents
     # s.send(input("MSG: ").encode())
-    BUFFER_SIZE = 1024
-    MESSAGE = s.recv(1024)
+    rdymsg = "ready"
+    s.send(rdymsg.encode())
+    MESSAGE = s.recv(8)
+    MESSAGE = MESSAGE.decode()
     print(MESSAGE)
 
-    x = MESSAGE.split(',')[0]
-    y = MESSAGE.split(',')[1]
+    if MESSAGE != "close": 
+        x = int(MESSAGE.split(',')[0])
+        y = int(MESSAGE.split(',')[1])
+        return x,y
 
-    return x, y
+    elif MESSAGE == "close":
+        s.close()
+        return -99, -99
+
 
 def close_cnxn(s):
     s.close()
