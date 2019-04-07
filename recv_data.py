@@ -7,25 +7,28 @@ import socket
 import random as r
 
 
-def recv_data():
-    # Receives x and y data from image processing.  Returns flag when new data is present.
+def est_cnxn():
     TCP_IP = socket.gethostname()
     TCP_PORT = 5000
     BUFFER_SIZE = 1024
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((TCP_IP, TCP_PORT))
-    while 1:
-        # s.send(input("MSG: ").encode())
-        MESSAGE = s.recv(256)
-        print(MESSAGE)
-        # data = s.recv(BUFFER_SIZE)
+    return s
 
+def recv_data(s):
+    # Receives x and y data from image processing.  Returns flag when new data is presents
+    # s.send(input("MSG: ").encode())
+    BUFFER_SIZE = 1024
+    MESSAGE = s.recv(1024)
+    print(MESSAGE)
+
+    x = MESSAGE.split(',')[0]
+    y = MESSAGE.split(',')[1]
+
+    return x, y
+
+def close_cnxn(s):
     s.close()
-
-    x = r.randint(-100, 100)
-    y = r.randint(0, 100)
-    return updated, x, y
-
 
 def recv_dummy_data():
     # Generates dummy data of a puck headed straight toward the robot

@@ -1,8 +1,7 @@
-from recv_data import recv_data, recv_dummy_data
+from recv_data import recv_data, recv_dummy_data, est_cnxn, close_cnxn
 from send_data import send
 import os
 from actions import hit_puck, move_up, move_down
-from constants import X_MAX, X_MIN, Y_MAX, Y_MIN
 import numpy as np
 import time
 import gym
@@ -24,6 +23,8 @@ class AirHockeyEnv(gym.Env):
         self._speed_y = 0
         self.hit_up = False
         self.hit_down = False
+
+        self.cnxn = None
 
         # Definining variables for rendering environment
         self.top_wall = None
@@ -47,7 +48,8 @@ class AirHockeyEnv(gym.Env):
         # When necessary. (Primarily robot position)
         new_state = []
         # rc = recv_data()
-        rc = recv_dummy_data()
+        self.cnxn = est_cnxn()
+        rc = recv_data(self.cnxn)
         # move_down(100)              # move down to y = 0
         self._robot_pos = 50        # not sure when to implement this, could do move_up(50)
         self._puck_x = rc[0]
@@ -105,10 +107,9 @@ class AirHockeyEnv(gym.Env):
     def quit_render(self):
         self.viewer.close()
 
-    '''
+
     def step(self, action):
         # This will be the function used for the really world data.
-
         done = 0
         reward = 0
         updated = False
@@ -151,7 +152,7 @@ class AirHockeyEnv(gym.Env):
 
         while not updated:
             # Loop waits for new data to be received before moving on
-            rc = recv_data()
+            rc = recv_data(self.cnxn)
             if rc[0] != self._prev_x and rc[1] != self._prev_y:
                 updated = True
 
@@ -206,7 +207,7 @@ class AirHockeyEnv(gym.Env):
         new_state.append(self._speed_y)
 
         return np.array(new_state), reward, int, hit, done
-    '''
+
     def position_robot(self):
         # One strategy is to use this function and wait to call it until puck is approaching
         # Either way, robot pos will be updated dynamically while puck is moving
@@ -216,7 +217,6 @@ class AirHockeyEnv(gym.Env):
     def in_play(self):
         # Return true if puck is in play
         return self._puck_x != -999 and self._puck_y != -999
-    '''
 
     def get_speed(self, axis):
         # returns the speed based on a previous position (v1) and a current position (v2)
@@ -316,3 +316,4 @@ class AirHockeyEnv(gym.Env):
         new_state.append(self._speed_y)
 
         return np.array(new_state), reward, int, hit, done
+    '''
