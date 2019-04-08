@@ -7,7 +7,7 @@ import socket
 import random as r
 
 
-def est_cnxn():
+def est_TCP_cnxn():
     TCP_IP = "192.168.0.1"
     TCP_PORT = 5000
     BUFFER_SIZE = 1024

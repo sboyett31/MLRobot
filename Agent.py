@@ -13,7 +13,6 @@ from constants import NUM_ENV_VAR, NUM_ACTIONS, ALPHA, GAMMA, LAMBDA, \
     MAX_EPS, MIN_EPS, MAX_MEMORY, BATCH, NUM_EPISODES, SAV_INCR, SAVE_MODEL, \
     LOAD_MODEL, SAVE_MEMORY, LOAD_MEMORY
 
-
 render_flag = False
 
 class Model:
@@ -170,13 +169,7 @@ class GameRunner:
                 action = self._choose_action(state)
                 print("action is: {}".format(action))
 
-
             next_state, reward, self.int, self.hit, done = self._env.step(action)
-
-            '''
-            Here we can move the robot to the position to hit the puck if the puck is close enough based on delay
-            
-            '''
 
             if state[1] < 0:
                 # Neural Net ignores states where puck is not on our side
