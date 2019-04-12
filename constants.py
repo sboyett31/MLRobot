@@ -1,7 +1,13 @@
-# Define boundaries of table
-X_MAX = 100
-X_MIN = -100
-Y_MAX = 100
+# Define boundaries of dummy table
+DUMMY_X_MAX = 100
+DUMMY_X_MIN = -100
+DUMMY_Y_MAX = 100
+DUMMY_Y_MIN = 0
+
+# Define boundaries of real table
+X_MAX = 350
+X_MIN = -350
+Y_MAX = 300
 Y_MIN = 0
 
 # Define constants for model

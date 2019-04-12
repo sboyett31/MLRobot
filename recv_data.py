@@ -1,16 +1,13 @@
 '''
 This is where the Serial data will be received from the image processing.
 '''
-
-
 import socket
 import random as r
 
 
 def est_TCP_cnxn():
-    TCP_IP = "192.168.0.1"
+    TCP_IP = "192.168.0.2"
     TCP_PORT = 5000
-    BUFFER_SIZE = 1024
     print("Connecting....")
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((TCP_IP, TCP_PORT))

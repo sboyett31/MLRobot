@@ -20,5 +20,12 @@ def est_serial_cnxn():
 
 def send(ser, data):
 
-    ser.write(data.encode(encoding='ascii'))
-    print("Sent " + data)
+    if 0 <= int(data) <= 300:
+        line = str(ser.readline())
+        if "not ready" not in line:
+            ser.write(data.encode(encoding='ascii'))
+            print("Sent " + data)
+        elif "not ready" in line:
+            print("(E) Hockey stick is currently moving... data not sent.")
+    else:
+        print("(E) Data out of range: {} - Not sent to Arduino.".format(data))

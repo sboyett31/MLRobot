@@ -109,8 +109,8 @@ class Memory:
 
     def save_mem(self):
         # Linux Fork Operation commented out
-        # newpid = os.fork()
-        newpid = 0
+        newpid = os.fork()
+        # newpid = 0  # For Windows
         if newpid == 0:
             print("Writing memory...")
             save_samples = self._samples
@@ -164,15 +164,16 @@ class GameRunner:
                 self._env.render()
             # Initialize action to 0 so that no action will be taken unless puck is on our side
             action = 0
-            if state[1] < 0:
-                # Only react if puck is on our side of env
+            if state[1] < 0 and state[3] < 0: 
+                # Only react if puck is on our side of env and travelling towards us
                 action = self._choose_action(state)
+                print("state is: {}".format(state))
                 print("action is: {}".format(action))
 
             next_state, reward, self.int, self.hit, done = self._env.step(action)
 
-            if state[1] < 0:
-                # Neural Net ignores states where puck is not on our side
+            if state[1] < 0 and state[3] < 0:
+                # Ignore if on opposite side and travelling away
                 tot_reward += reward
                 if done:
                     next_state = None
@@ -224,8 +225,8 @@ class GameRunner:
 
 def save_model(saver, ss):
     # Function in order to implement saving using multi threading
-    # newpid = os.fork()  LINUX OS CALL
-    newpid = 0
+    newpid = os.fork()
+    # newpid = 0 # Windows
     if newpid == 0:
         save_path = saver.save(ss, SAVE_MODEL)
         print("Model saved in path %s" % save_path)
@@ -241,8 +242,7 @@ def save_eps(eps):
 
 
 if __name__ == "__main__":
-
-    env = AirHockeyEnv()
+    
     model = Model(NUM_ENV_VAR, NUM_ACTIONS, batch_size=BATCH)
     mem = Memory(MAX_MEMORY)
 
@@ -256,7 +256,8 @@ if __name__ == "__main__":
             print("No previous model to load...")
             print("Initializing Artificial Neural Network Model")
             sess.run(model._var_init)
-
+            
+        env = AirHockeyEnv()
         gr = GameRunner(sess, model, env, mem, MAX_EPS, MIN_EPS, LAMBDA)
         num_episodes = NUM_EPISODES
         count = 0
@@ -267,6 +268,7 @@ if __name__ == "__main__":
         int_pct_arr = []
         hit_pct_arr = []
         while count < num_episodes:
+            print("episode: {}".format(count+1))
             if gr.int:
                 episode_ints += 1
             if gr.hit:
