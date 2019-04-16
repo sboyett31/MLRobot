@@ -17,7 +17,7 @@ BATCH = 20                  # Batch Size
 NUM_EPISODES = 50000        # Total number of episodes
 
 NUM_ENV_VAR = 5             # X, Y, X_SPEED, Y_SPEED, ROBOT_POS
-NUM_ACTIONS = 13            # MOVE_UP(1-5), MOVE_DOWN(1-5), HIT_PUCK(up/down), DO NOTHING
+NUM_ACTIONS = 12            # MOVE_UP(1-5), MOVE_DOWN(1-5), HIT_PUCK, DO NOTHING
 
 # Define Hyper-parameters
 ALPHA = 0                   # Learning rate (Can be implemented in Adam Optimizer)

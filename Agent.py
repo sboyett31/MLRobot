@@ -167,15 +167,17 @@ class GameRunner:
             if state[1] < 0 and state[3] < 0: 
                 # Only react if puck is on our side of env and travelling towards us
                 action = self._choose_action(state)
-                print("state is: {}".format(state))
-                print("action is: {}".format(action))
+                # print("state is: {}".format(state))
+                # print("action is: {}".format(action))
 
             next_state, reward, self.int, self.hit, done = self._env.step(action)
 
             if state[1] < 0 and state[3] < 0:
                 # Ignore if on opposite side and travelling away
+                # self._env.send(self._env.SER_cnxn, str(150)) # Recenter robot
                 tot_reward += reward
                 if done:
+                    print("Done")
                     next_state = None
                 self._memory.add_sample((state, action, reward, next_state))
                 self._replay()

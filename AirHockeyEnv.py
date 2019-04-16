@@ -1,7 +1,6 @@
-from recv_data import recv_data, recv_dummy_data, est_TCP_cnxn
+from recv_data import recv_puck, recv_robo, recv_dummy_data, est_TCP_cnxn
 from send_data import est_serial_cnxn, send
 from constants import Y_MAX, Y_MIN
-from actions import hit_puck, move_up, move_down
 import numpy as np
 import time
 import gym
@@ -16,14 +15,22 @@ class AirHockeyEnv(gym.Env):
     def __init__ (self):
         # Send to arduino actual Y position, not increments
         self._robot_pos = 0
+        self._prev_robot_pos = 0
+        self._next_robot_pos = None
+        self._temp_robot_pos = None
         self._prev_x = 0
         self._prev_y = 0
         self._puck_x = 0
         self._puck_y = 0
+        self._prev_speed_x = 0
         self._speed_x = 0
         self._speed_y = 0
         self.hit_up = False
         self.hit_down = False
+        self._new_episode_flag = False  # Flag to stop multiple episode increments'
+        self._goal_scored = False
+        self._intercepted = False
+        self._hit = False   
 
         self.TCP_cnxn = est_TCP_cnxn()
         self.SER_cnxn = est_serial_cnxn()
@@ -39,23 +46,40 @@ class AirHockeyEnv(gym.Env):
         self.stick_trans = None
 
         self.seed()
-        self.reset()
+        #self.reset()
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def reset(self):
-        # This function will be responsible for resetting the environment
-        # When necessary. (Primarily robot position)
+        # Resets the environment on startup and at the beginning of episode
         new_state = []
-        # rc = recv_data()
-        rc = recv_data(self.TCP_cnxn)
-        self._robot_pos = 50
+
+        # Receive Puck data from Image Processing PI
+        rc = recv_puck(self.TCP_cnxn)
+        
+        # Move physical robot to middle of playing field
+        self._next_robot_pos = 150
+        self._temp_robot_pos = self._next_robot_pos
+        send(self.SER_cnxn, str(self._next_robot_pos))
+
+        # Updates robot position directly from arduino keeps previous value until new value is sent            
+        self._robot_pos = recv_robo(self.SER_cnxn)
+        if self._robot_pos == None:
+            self._robot_pos = self._prev_robot_pos
+
+        # Update puck variables 
         self._puck_x = rc[0]
         self._puck_y = rc[1]
-        self._speed_x = 0  #self.get_speed('x')
+        self._speed_x = 0  #self.get_speed('x') start at 0 for first state
         self._speed_y = 0  #self.get_speed('y')
+
+        # Resetting flags used for informing robot
+        # These flags should change to True only once per episode
+        self._goal_scored = False
+        self._intercepted = False
+        self._hit = False
 
         new_state.append(self._robot_pos)
         new_state.append(rc[0])
@@ -65,6 +89,51 @@ class AirHockeyEnv(gym.Env):
         
         return np.array(new_state)
 
+    def verify_robot_pos(self):
+        # A function to verify robot position is in bounds after updating
+        if self._temp_robot_pos < Y_MIN:
+            self._temp_robot_pos = Y_MIN
+        elif self._temp_robot_pos > Y_MAX:
+            self._temp_robot_pos = Y_MAX
+
+    def send_data_new(self, action):
+        # Trying out method of updating robot pos in background
+        # Here 1st action would be sent to arduino and temp_pos&next_pos = robot_pos + action
+        # Next iteration if robot_pos != next_pos: temp_pos = temp_pos + action
+        # Once robot_pos == next_pos, next_pos = temp_pos and send next_pos
+
+        print("action is: {}".format(action))
+        if 0 < action < 6:      # actions 1 - 5 = Move Up
+            move = int(action*3)
+        elif 5 < action < 11:   # actions 6 - 10 = Move Down
+            move = -int((action-5)*3)
+        elif action == 11:
+            self.hit_up = True
+            sendBuff = "999"
+            send(self.SER_cnxn, str(sendBuff))
+        elif action == 0:       # action = Do nothing
+            send(self.SER_cnxn, str(self._next_robot_pos))
+            pass
+
+        if 0 < action < 11:
+            if self._next_robot_pos is None:
+                # Error handling
+                self._next_robot_pos = self._robot_pos + move
+                send(self.SER_cnxn, str(self._next_robot_pos))
+                self._temp_robot_pos = self._next_robot_pos
+            elif self._next_robot_pos is not None and self._robot_pos == self._next_robot_pos:
+                # sends next position for robot to move to
+                self._temp_robot_pos += move
+                self.verify_robot_pos()
+                self._next_robot_pos = self._temp_robot_pos
+                send(self.SER_cnxn, str(self._next_robot_pos))
+            elif self._next_robot_pos is not None and self._robot_pos != self._next_robot_pos:
+                send(self.SER_cnxn, str(self._next_robot_pos))
+                self._temp_robot_pos += move # This updates robot pos in background while moving
+                self.verify_robot_pos()
+
+        print("Action is: {}, current is: {}, next is: {}, temp is: {}".format(action, self._robot_pos, self._next_robot_pos, self._temp_robot_pos))
+
     def step(self, action):
         # This will be the function used for the real world data.
         done = 0
@@ -72,90 +141,101 @@ class AirHockeyEnv(gym.Env):
         hit = False
         updated = False
         intercept = False
-        new_state = []
+        hit_puck = "999"    # String to send arduino to spin hockey stick
         rc = []
+        new_state = []
         self._prev_x = int(self._puck_x)
         self._prev_y = int(self._puck_y)
+        self._prev_speed_x = int(self._speed_x)
+        self._prev_robot_pos = int(self._robot_pos)
+        
 
+        self.send_data_new(action)
+
+        '''
+        ## SENDING DATA ##
+        print("action is: {}".format(action))
         if 0 < action < 6:      # actions 1 - 5 = Move Up
-            intensity = action
-            self._robot_pos += intensity*3 # Accounts for scaling
-            if self._robot_pos > Y_MAX:
-                self._robot_pos = Y_MAX
+            sendBuff = self._robot_pos + int(action*3)
+            send(self.SER_cnxn, str(sendBuff))
         elif 5 < action < 11:   # actions 6 - 10 = Move Down
-            intensity = action - 5
-            self._robot_pos -= intensity*3
-            if self._robot_pos < Y_MIN:
-                self._robot_pos = Y_MIN
+            sendBuff = self._robot_pos - int((action-5)*3)
+            send(self.SER_cnxn, str(sendBuff))
         elif action == 11:
             self.hit_up = True
-        elif action == 12:
-            self.hit_down = True
+            sendBuff = hit_puck
+            send(self.SER_cnxn, str(sendBuff))
         elif action == 0:       # action = Do nothing
+            # send(self.SER_cnxn, str(0))
             pass
+        ## END SENDING DATA ##
+        '''
 
-        if 0 < action < 11:
-            # Send the position of the robot to the arduino for positioning.
-            send(self.SER_cnxn, str(self._robot_pos))
-        elif action == 11:
-            pass
-            #send(self.SER_cnxn, str("hitup"))
-        elif action == 12:
-            pass
-            #send(self.SER_cnxn, str("hitdown"))
-            
+        
+        ## RECEIVING DATA ##
         count = 1
         while not updated:
             # Loop waits for new data to be received before moving on
-            print("count = {}".format(count))
-            rc = recv_data(self.TCP_cnxn)
+            # print("count = {}".format(count))
+            rc = recv_puck(self.TCP_cnxn)
             if rc[0] != self._prev_x or rc[1] != self._prev_y:
                 updated = True
             else:
                 count += 1
+        # Receive robot position directly from arduino
+        self._robot_pos = recv_robo(self.SER_cnxn)
+        if self._robot_pos == None:
+            self._robot_pos = self._prev_robot_pos
+        print("Robot position in AHE.py is: {}".format(self._robot_pos))
+        ## END RECEIVING DATA ##
 
-        # Update values with new data received from image processing
-        self._puck_x = int(rc[0])
-        self._puck_y = int(rc[1])
-        self._speed_x = self.get_speed('x')
-        self._speed_y = self.get_speed('y')
+        # Update puck values if goal not scored
+        if rc[0] != -999 and rc[1] != -999:
+            self._puck_x = int(rc[0])
+            self._puck_y = int(rc[1])
+            self._speed_x = self.get_speed('x')
+            self._speed_y = self.get_speed('y')
+        else:
+            # If -999's returned, no data received for one second
+            print("Timeout")
+            self._goal_scored = True
 
-        # calculate reward
-        x_dist = abs(-350 - self._puck_x)
-        y_dist = abs(self._puck_y - self._robot_pos)
+        # calculating x distance and y distance
+        x_dist = self._puck_x + 300             
+        y_dist = self._puck_y - self._robot_pos
+        # DEBUG_DIST print("x_speed: {} x_dist: {} y_dist: {} Robot_pos: {}".format(self._speed_x, x_dist, y_dist, self._robot_pos))
 
-        # The reward equation could be used if we implemented Joel's algorithm as an input
-        if ((100 - y_dist) * (
-                0.01 * (100 - x_dist))) > 50:  # Calc reward based on dist, if puck is closer, y_dist more imp
+        # Could be used as an equation where the y_dist is more important the lower x_dist is
+        if ((100 - y_dist) * (0.01 * (100 - x_dist))) > 50:  
             reward += 10
 
-        if x_dist < 20:
+        if x_dist < 20 and x_dist >= -20 and self._speed_x < 0:
             # Reward for intercepting puck
-            if y_dist < 5:
-                reward += 100 - (y_dist * 5)
-            if y_dist < 5:
+            if (-25 < y_dist <= 0) and self._intercepted == False:
+                print("PUCK INTERCEPTED!!!!!")
+                reward += 100 
+                self._intercepted = True
+            if (-25 < y_dist < 0) and action == 11 and self._hit == False:
                 # Check for successful hit
-                if self._puck_y >= self._robot_pos and action == 12:
-                    # Successful hit up action
-                    reward += 1000
-                    hit = True
-                    if self.puck is not None:
-                        self.puck.set_color(255, 0, 0)
-                        time.sleep(1)
-                elif self._puck_y <= self._robot_pos and action == 13:
-                    # Successful hit down action
-                    reward += 1000
-                    hit = True
-                    if self.puck is not None:
-                        self.puck.set_color(255, 0, 0)
-                        time.sleep(1)
-        else:
+                print("PUCK HIT!!!!!!!!!")
+                reward += 1000
+                self._hit = True
+                hit = True
+        elif x_dist > 20 and action == 11:
             # Subtract from reward if hit action is chosen while puck is not close
-            # (Will try this out later)
             reward -= 500
             pass
-        if x_dist == 0:
+        
+        # print("x_dist: {} x_speed: {}".format(x_dist, self._speed_x))
+        # Complete Episode when puck crosses robot axis
+        if x_dist < 30 and self._speed_x > 0 and self._new_episode_flag == False:
+            self._new_episode_flag = True
             done = True
+        elif x_dist < 0 and self._goal_scored == True:
+            self._new_episode_flag = True
+            done = True
+        elif x_dist > 30:
+            self._new_episode_flag = False
 
         new_state.append(self._robot_pos)
         new_state.append(self._puck_x)
@@ -164,12 +244,6 @@ class AirHockeyEnv(gym.Env):
         new_state.append(self._speed_y)
 
         return np.array(new_state), reward, intercept, hit, done
-
-    def position_robot(self):
-        # One strategy is to use this function and wait to call it until puck is approaching
-        # Either way, robot pos will be updated dynamically while puck is moving
-        move_up(self._robot_pos)
-        return
 
     def in_play(self):
         # Return true if puck is in play
@@ -184,7 +258,7 @@ class AirHockeyEnv(gym.Env):
             v1 = self._prev_y
             v2 = self._puck_y
         if self.in_play():
-            return int((v2-v1)/2)
+            return int((v2-v1))
         elif not self.in_play():
             return 0
 
