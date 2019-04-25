@@ -164,17 +164,16 @@ class GameRunner:
                 self._env.render()
             # Initialize action to 0 so that no action will be taken unless puck is on our side
             action = 0
-            if state[1] < 0 and state[3] < 0: 
-                # Only react if puck is on our side of env and travelling towards us
+            if state[3] < 0: 
+                # Only react if puck travelling towards us
                 action = self._choose_action(state)
                 # print("state is: {}".format(state))
                 # print("action is: {}".format(action))
 
             next_state, reward, self.int, self.hit, done = self._env.step(action)
 
-            if state[1] < 0 and state[3] < 0:
-                # Ignore if on opposite side and travelling away
-                # self._env.send(self._env.SER_cnxn, str(150)) # Recenter robot
+            if state[3] < 0:
+                # Ignore if puck travelling away
                 tot_reward += reward
                 if done:
                     print("Done")
@@ -226,7 +225,7 @@ class GameRunner:
 
 
 def save_model(saver, ss):
-    # Function in order to implement saving using multi threading
+    # Function in order to implement saving by forking a new process
     newpid = os.fork()
     # newpid = 0 # Windows
     if newpid == 0:
@@ -270,26 +269,26 @@ if __name__ == "__main__":
         int_pct_arr = []
         hit_pct_arr = []
         while count < num_episodes:
-            print("episode: {}".format(count+1))
+            #print("episode: {}".format(count+1))
             if gr.int:
                 episode_ints += 1
             if gr.hit:
                 episode_hits += 1
             if count % 10 == 0:
-                if count != 0 and count % 100 == 0:
+                if count != 0 and count % 10 == 0:
                     # Print Stats every 100 episodes
-                    li = gr._reward_list[count-100:count-1]
+                    li = gr._reward_list[count-10:count-1]
                     avg_rwd = sum(li) / float(len(li))
-                    int_pct = episode_ints
-                    hit_pct = episode_hits
+                    int_pct = episode_ints*10
+                    hit_pct = episode_hits*10
                     int_pct_arr.append(int_pct)
                     hit_pct_arr.append(hit_pct)
-                    print('Episode {} of {}.  Eps Value: {:.4f}, Avg Reward: {:.2f}, Int Rate: {}% Hit Rate: {}%'
-                          .format(count+1, num_episodes, gr._eps, avg_rwd, int_pct, hit_pct))
+                    print('Episode {} of {}.  Eps Value: {:.4f}, Avg Reward: {:.2f}'
+                          .format(count+1, num_episodes, gr._eps, avg_rwd))
                     episode_ints = 0
                     episode_hits = 0
 
-            elif count % 999 == 0:
+            elif count % 99 == 0:
                 # Saving Model and Epsilon Value every 1000 Episodes
                 save_sess = sess
                 save_model(model.saver, save_sess)

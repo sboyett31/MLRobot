@@ -24,9 +24,10 @@ def send(ser, data):
     if 0 <= int(data) <= 300 or int(data) == 999:
         #line = str(ser.readline())
         #print("line in send is: {}".format(line)) this was reading partial vals
-        sendBuff = ("${}$".format(data))
+        sendBuff = ("<{}<".format(data))
+        print("Data sent: {}".format(sendBuff))
         ser.write(sendBuff.encode(encoding='ascii'))
-        print("sent: {}".format(data))
+        #print("sent: {}".format(data))
         # sent = True
         '''
         if "moving" not in line:
@@ -39,26 +40,6 @@ def send(ser, data):
     #else:
     #print("(E) Data: {} out of Range.. not sent.".format(data))
     
-    '''
-    ## Checks for robot position to be accurate just sends "hit action" once
-    if 0 <= int(data) <= 300:
-        sendBuff = ("${}$".format(data))
-        ser.write(sendBuff.encode(encoding='ascii'))
-        line = str(ser.readline());
-        line = line.split("'")[1]
-        while (int(line)/9) != int(data):
-            ser.write(sendBuff.encode(encoding='ascii'))
-            print("Sent: " + data)
-            line = str(ser.readline())
-            line = line.split("'")[1]
-            print("Received: " + line) 
-            return 1
-    elif int(data) == 999:
-        sendBuff = ("${}$".format(data))
-        ser.write(sendBuff.encode(encoding='ascii'))
-    else:
-        print("(E) Data out of Range.. not sent.")
-    
-    '''
+
 
     

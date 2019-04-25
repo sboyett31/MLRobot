@@ -31,7 +31,7 @@ def recv_puck(tcp):
         x = int(MESSAGE.split(',')[0])
         y = int(MESSAGE.split(',')[1])
     
-        return x,y
+        return -x,y
     elif MESSAGE == "close":
         tcp.close()
         return -998, -988
@@ -40,10 +40,10 @@ def recv_puck(tcp):
 def recv_robo(ser):
     if ser.in_waiting:
         line = str(ser.readline())
-        print("Received line: {}".format(line))
+        #print("Received line: {}".format(line))
         line = line.split("'")[1]
         line = line.split("\\")[0]
-        print("Received robot position: {}".format(line))
+        #print("Received robot position: {}".format(line))
 
         if line:
             robot_pos = int(line)/9
